@@ -19,6 +19,14 @@ class UserUpdate(BaseModel):
     phone: Optional[str] = Field(default=None, min_length=1, max_length=20, description="手机号")
     email: Optional[str] = Field(default=None, min_length=1, max_length=100, description="邮箱")
     password: Optional[str] = Field(default=None, min_length=6, max_length=128, description="密码")
+    
+    @model_validator(mode='before')
+    @classmethod
+    def convert_empty_strings_to_none(cls, data):
+        """将空字符串转换为 None，以便跳过验证"""
+        if isinstance(data, dict):
+            return {k: None if v == "" else v for k, v in data.items()}
+        return data
 
 
 class UserOut(BaseModel):
@@ -52,6 +60,24 @@ class UserLogin(BaseModel):
 class UserResetPassword(BaseModel):
     identifier: str = Field(..., description="用户标识：用户名、手机号或邮箱")
     new_password: str = Field(..., min_length=6, max_length=128, description="新密码")
+
+
+class AdminChangePassword(BaseModel):
+    """管理员修改用户密码的请求"""
+    new_password: str = Field(..., min_length=6, max_length=128, description="新密码")
+
+
+class ForgotPassword(BaseModel):
+    """用户找回密码的请求"""
+    identifier: str = Field(..., description="用户标识：用户名、手机号或邮箱")
+
+
+class ForgotPasswordResponse(BaseModel):
+    """用户找回密码的响应"""
+    message: str = Field(..., description="响应消息")
+    new_password: str = Field(..., description="新生成的随机5位密码")
+    user_id: int = Field(..., description="用户ID")
+    username: str = Field(..., description="用户名")
 
 
 class UserLoginInfo(BaseModel):

@@ -13,7 +13,7 @@ from ..websocket_manager import ws_manager
 router = APIRouter(prefix="/groups/{group_id}/chats", tags=["chats"])
 
 
-def get_current_user_id(x_user_id: int | None = Header(default=None)) -> int:
+def get_current_user_id(x_user_id: int | None = Header(default=None, alias="X-User-Id")) -> int:
     if x_user_id is None:
         raise HTTPException(status_code=401, detail="缺少用户标识 X-User-Id")
     return x_user_id
@@ -75,10 +75,30 @@ def list_messages(
     limit: int = Query(50, ge=1, le=200),
     min_chat_no: Optional[int] = Query(None),
     q: Optional[str] = Query(None, description="按内容关键字搜索"),
+    x_user_id: int = Depends(get_current_user_id),
 ):
+    """
+    获取群聊消息列表（支持关键字搜索）
+    
+    - 需要 Header: X-User-Id（必须是群成员或群主才能查看）
+    - 支持关键字搜索：使用参数 `q` 进行模糊匹配
+    - 支持分页：使用 `skip` 和 `limit` 参数
+    - 支持按消息序号筛选：使用 `min_chat_no` 参数
+    """
     group = db.get(Group, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="群不存在")
+    
+    # 权限验证：必须是群成员或群主才能查看群聊记录
+    member = db.scalar(
+        select(GroupMember).where(
+            GroupMember.group_id == group_id,
+            GroupMember.user_id == x_user_id
+        )
+    )
+    if not member and x_user_id != group.created_by_user_id:
+        raise HTTPException(status_code=403, detail="非群成员，无法查看群聊记录")
+    
     stmt = select(ChatMessage).where(ChatMessage.group_id == group_id)
     if min_chat_no is not None:
         stmt = stmt.where(ChatMessage.chat_no >= min_chat_no)

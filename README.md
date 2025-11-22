@@ -47,6 +47,7 @@ Open API docs at: http://127.0.0.1:8000/docs
 - DELETE `/api/users/{id}` - Delete user
 - POST `/api/users/login` - Login (body: `login_identifier` (username/phone/email), `password`)
 - POST `/api/users/reset-password` - Reset password (body: `identifier` (username/phone/email), `new_password`)
+- POST `/api/users/{id}/change-password` - Admin change user password (Header: `X-Admin-Token: dev-admin`, body: `new_password`) - 管理员修改任意用户密码
 - POST `/api/users/{id}/role?role=admin|user` - Change role (Header: `X-Admin-Token: dev-admin`)
 
 ### Groups
@@ -86,16 +87,21 @@ Open API docs at: http://127.0.0.1:8000/docs
 
 入群申请新增字段：`reason`（申请理由），在提交与列表接口中返回。
 
-### Group Chats
-- POST `/api/groups/{group_id}/chats/` - Send message (body: `chat_no?`, `user_id`, `sender_name?`, `content`)；未提供 `chat_no` 时按群内自增生成（需要是群成员）
-- GET `/api/groups/{group_id}/chats/?skip=0&limit=50&min_chat_no=&q=` - List/search messages (支持关键字 `q`)
-- DELETE `/api/groups/{group_id}/chats/{message_id}` - 撤回消息（Header: `X-User-Id`）：
-  - 发送者：2 分钟内可撤回
-  - 群主：可随时撤回
-- WebSocket: `ws://<host>/api/groups/{group_id}/chats/ws`
-  - 服务器会推送事件：
-    - `{"event":"message", "data": {...}}`
-    - `{"event":"retracted", "data": {"message_id":..}}`
+  ### Group Chats
+  - POST `/api/groups/{group_id}/chats/` - Send message (body: `chat_no?`, `user_id`, `sender_name?`, `content`)；未提供 `chat_no` 时按群内自增生成（需要是群成员）
+  - GET `/api/groups/{group_id}/chats/?skip=0&limit=50&min_chat_no=&q=` - 获取群聊消息列表/查找群聊记录（Header: `X-User-Id`，必须是群成员或群主）：
+    - 支持关键字搜索：使用参数 `q` 进行模糊匹配消息内容
+    - 支持分页：`skip` 和 `limit` 参数
+    - 支持按消息序号筛选：`min_chat_no` 参数
+  - DELETE `/api/groups/{group_id}/chats/{message_id}` - 撤回消息（Header: `X-User-Id`）：
+    - 发送者：2 分钟内可撤回自己的消息
+    - 群主：可随时撤回任意消息
+    - 撤回后通过 WebSocket 推送撤回事件
+  - WebSocket: `ws://<host>/api/groups/{group_id}/chats/ws`
+    - 服务器会推送事件：
+      - `{"event":"message", "data": {...}}` - 新消息
+      - `{"event":"retracted", "data": {"message_id":..}}` - 消息撤回
+  - 清空群聊信息：属于客户端本地行为，无需服务端接口（前端删除本地缓存的聊天记录即可）
 
 ### Files（文件上传）
 - POST `/api/files/upload` - 上传文件（multipart/form-data，字段名：`file`）

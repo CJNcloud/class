@@ -333,6 +333,11 @@ def transfer_ownership(group_id: int, to_user_id: int, db: Session = Depends(get
     target = db.scalar(select(GroupMember).where(and_(GroupMember.group_id == group_id, GroupMember.user_id == to_user_id)))
     if not target:
         raise HTTPException(status_code=404, detail="目标用户不在群内")
+    prev_member = db.scalar(select(GroupMember).where(and_(GroupMember.group_id == group_id, GroupMember.user_id == group.created_by_user_id)))
+    if prev_member:
+        prev_member.is_group_admin = False
+        db.add(prev_member)
+    target.is_group_admin = True
     group.created_by_user_id = to_user_id
     db.add(group)
     db.commit()

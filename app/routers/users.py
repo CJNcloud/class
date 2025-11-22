@@ -1,4 +1,6 @@
 import logging
+import secrets
+import string
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Header
@@ -7,7 +9,11 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import User
-from ..schemas import UserCreate, UserOut, UserUpdate, UserLogin, UserResetPassword, UserLoginResponse, UserLoginInfo
+from ..schemas import (
+    UserCreate, UserOut, UserUpdate, UserLogin, UserResetPassword, 
+    UserLoginResponse, UserLoginInfo, AdminChangePassword, 
+    ForgotPassword, ForgotPasswordResponse
+)
 from ..security import hash_password, verify_password
 
 
@@ -213,4 +219,31 @@ def change_role(
     db.refresh(user)
     logger.info(f"用户角色修改成功: user_id={user_id}, username={user.username}, old_role={old_role}, new_role={role}")
     return user
+
+
+@router.post("/{user_id}/change-password", response_model=UserOut)
+def admin_change_password(
+    user_id: int,
+    payload: AdminChangePassword,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    """
+    管理员修改用户密码接口
+    需要管理员权限（通过 X-Admin-Token 头验证）
+    """
+    logger.info(f"管理员修改用户密码请求: user_id={user_id}")
+    user = db.get(User, user_id)
+    if not user:
+        logger.warning(f"管理员修改用户密码失败: 用户不存在 user_id={user_id}")
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    # 更新密码
+    user.hashed_password = hash_password(payload.new_password)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    logger.info(f"管理员修改用户密码成功: user_id={user_id}, username={user.username}")
+    return user
+
 
