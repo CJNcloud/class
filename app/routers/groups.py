@@ -595,14 +595,41 @@ def dissolve_group(
             else:
                 raise HTTPException(status_code=403, detail="无权解散该群，仅群主或管理员可以解散")
     
-    # delete related members and chats
-    db.execute(
-        GroupMember.__table__.delete().where(GroupMember.group_id == group_id)
-    )
-    db.execute(
-        ChatMessage.__table__.delete().where(ChatMessage.group_id == group_id)
-    )
-    db.delete(group)
-    db.commit()
-    return None
+    # 级联删除所有与群组相关的数据
+    try:
+        # 1. 删除群组成员
+        db.execute(
+            GroupMember.__table__.delete().where(GroupMember.group_id == group_id)
+        )
+        
+        # 2. 删除群组聊天消息
+        db.execute(
+            ChatMessage.__table__.delete().where(ChatMessage.group_id == group_id)
+        )
+        
+        # 3. 删除群组入群申请
+        from ..models import GroupJoinRequest
+        db.execute(
+            GroupJoinRequest.__table__.delete().where(GroupJoinRequest.group_id == group_id)
+        )
+        
+        # 4. 删除群组更新申请
+        from ..models import GroupUpdateRequest
+        db.execute(
+            GroupUpdateRequest.__table__.delete().where(GroupUpdateRequest.group_id == group_id)
+        )
+        
+        # 5. 删除与群组相关的举报记录
+        from ..models import Report
+        db.execute(
+            Report.__table__.delete().where(Report.group_id == group_id)
+        )
+        
+        # 6. 最后删除群组本身
+        db.delete(group)
+        db.commit()
+        return None
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"解散群聊失败: {str(e)}")
 
