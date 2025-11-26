@@ -138,9 +138,82 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
         logger.warning(f"删除用户失败: 用户不存在 user_id={user_id}")
         raise HTTPException(status_code=404, detail="用户不存在")
     username = user.username
-    db.delete(user)
-    db.commit()
-    logger.info(f"用户删除成功: user_id={user_id}, username={username}")
+    
+    # 级联删除所有关联数据
+    try:
+        # 1. 删除用户发送的聊天消息
+        from ..models import ChatMessage
+        chat_messages = db.query(ChatMessage).filter(ChatMessage.user_id == user_id).all()
+        for msg in chat_messages:
+            db.delete(msg)
+        logger.info(f"删除用户聊天消息: user_id={user_id}, count={len(chat_messages)}")
+        
+        # 2. 删除用户相关的举报记录
+        from ..models import Report
+        reports = db.query(Report).filter(
+            (Report.user_id == user_id) | (Report.reported_user_id == user_id)
+        ).all()
+        for report in reports:
+            db.delete(report)
+        logger.info(f"删除用户举报记录: user_id={user_id}, count={len(reports)}")
+        
+        # 3. 删除用户的入群申请
+        from ..models import GroupJoinRequest
+        join_requests = db.query(GroupJoinRequest).filter(GroupJoinRequest.user_id == user_id).all()
+        for req in join_requests:
+            db.delete(req)
+        logger.info(f"删除用户入群申请: user_id={user_id}, count={len(join_requests)}")
+        
+        # 4. 删除用户的建群申请
+        from ..models import GroupCreateRequest
+        create_requests = db.query(GroupCreateRequest).filter(GroupCreateRequest.created_by_user_id == user_id).all()
+        for req in create_requests:
+            db.delete(req)
+        logger.info(f"删除用户建群申请: user_id={user_id}, count={len(create_requests)}")
+        
+        # 5. 删除用户的群更新申请
+        from ..models import GroupUpdateRequest
+        update_requests = db.query(GroupUpdateRequest).filter(GroupUpdateRequest.requested_by_user_id == user_id).all()
+        for req in update_requests:
+            db.delete(req)
+        logger.info(f"删除用户群更新申请: user_id={user_id}, count={len(update_requests)}")
+        
+        # 6. 删除用户的群成员身份
+        from ..models import GroupMember
+        group_members = db.query(GroupMember).filter(GroupMember.user_id == user_id).all()
+        for member in group_members:
+            db.delete(member)
+        logger.info(f"删除用户群成员身份: user_id={user_id}, count={len(group_members)}")
+        
+        # 7. 删除用户创建的群组
+        from ..models import Group
+        groups = db.query(Group).filter(Group.created_by_user_id == user_id).all()
+        for group in groups:
+            # 删除该群组的所有聊天消息
+            group_messages = db.query(ChatMessage).filter(ChatMessage.group_id == group.id).all()
+            for msg in group_messages:
+                db.delete(msg)
+            # 删除该群组的所有成员
+            group_members = db.query(GroupMember).filter(GroupMember.group_id == group.id).all()
+            for member in group_members:
+                db.delete(member)
+            # 删除该群组的所有入群申请
+            group_join_requests = db.query(GroupJoinRequest).filter(GroupJoinRequest.group_id == group.id).all()
+            for req in group_join_requests:
+                db.delete(req)
+            # 删除该群组
+            db.delete(group)
+        logger.info(f"删除用户创建的群组: user_id={user_id}, count={len(groups)}")
+        
+        # 最后删除用户
+        db.delete(user)
+        db.commit()
+        logger.info(f"用户删除成功: user_id={user_id}, username={username}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"删除用户失败: user_id={user_id}, error={str(e)}")
+        raise HTTPException(status_code=500, detail=f"删除用户失败: {str(e)}")
+    
     return None
 
 
